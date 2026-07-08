@@ -1,0 +1,38 @@
+{
+  "id": "pantry",
+  "name": "Pantry Inventory",
+  "version": "1.0.0",
+  "description": "Track what's in the fridge, freezer, and pantry — quantities, expiration dates, and what's running low. One tap pushes a depleted item to the Grocery List. Works for a single household or a shared communal kitchen with per-item owners and restock requests.",
+  "entrypoint": "index.html",
+  "runtime": "static",
+  "icon": "🥫",
+  "category": "food",
+  "tags": ["food", "pantry", "inventory", "kitchen", "grocery"],
+  "storage": "db",
+  "db_plaintext_columns": ["expiry_date"],
+  "data_access": {
+    "reads": ["family.members"],
+    "writes": ["app.grocery.pending_items"]
+  },
+  "permissions": {
+    "default_audience": "everyone",
+    "requires_approval": false
+  },
+  "nav": { "label": "Pantry" },
+  "glance": {
+    "source": {
+      "kind": "sql",
+      "query": "SELECT COUNT(*) AS n FROM app_pantry__items WHERE status != 'ok' LIMIT 1"
+    },
+    "display": { "template": "badge", "count": "n", "label": "running low", "severity": "warn" }
+  },
+  "resource_limits": {
+    "max_db_bytes": 10485760,
+    "max_store_writes_per_day": 500
+  },
+  "ai_access": {
+    "allowed": true,
+    "mode": "read",
+    "db_exports": ["low_items", "expiring_items"]
+  }
+}
