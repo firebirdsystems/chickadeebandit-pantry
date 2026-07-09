@@ -83,13 +83,11 @@
 
 <script type="module">
 import { esc, hubConfirm, hubAlert, crossWrite } from "/hub-sdk.js";
+import { CATEGORIES, CAT_LABEL, statusFor, daysUntil as daysUntilOf, visibleItems as visibleItemsOf } from "./logic.js";
 
 const CONTEXT = window.__CONTEXT_URL ?? "";
 const DB = window.__DB_URL ?? "";
 const HUB_MEMBER = window.__CURRENT_MEMBER ?? null;
-
-const CATEGORIES = ["fridge", "freezer", "pantry", "other"];
-const CAT_LABEL = { fridge: "Fridge", freezer: "Freezer", pantry: "Pantry", other: "Other" };
 
 let members = [];
 let currentMember = null;
@@ -154,12 +152,6 @@ function clearMessages() { error = ""; notice = ""; }
 function showError(m) { error = m; notice = ""; render(); }
 function showNotice(m) { notice = m; error = ""; render(); }
 
-function statusFor(quantity, low) {
-  const q = Number(quantity) || 0;
-  if (q <= 0) return "out";
-  if (q <= (Number(low) || 0)) return "low";
-  return "ok";
-}
 
 // ── mutations ────────────────────────────────────────────────────────────────
 async function saveItem(fields, existingId) {
@@ -314,12 +306,7 @@ function openItemModal(existingId) {
 }
 
 // ── render ───────────────────────────────────────────────────────────────────
-function daysUntil(dateStr) {
-  if (!dateStr) return null;
-  const d = new Date(`${dateStr}T12:00:00`);
-  if (isNaN(d)) return null;
-  return Math.round((d - new Date(`${today()}T12:00:00`)) / 86400000);
-}
+function daysUntil(dateStr) { return daysUntilOf(dateStr, today()); }
 function expiryPill(it) {
   const d = daysUntil(it.expiry_date);
   if (d === null) return "";
@@ -337,11 +324,7 @@ function renderMessages() {
   return `${error ? `<div class="error">${esc(error)}</div>` : ""}${notice ? `<div class="notice">${esc(notice)}</div>` : ""}`;
 }
 
-function visibleItems() {
-  if (view === "low") return items.filter(i => i.status !== "ok");
-  if (view === "all") return items;
-  return items.filter(i => i.category === view);
-}
+function visibleItems() { return visibleItemsOf(items, view); }
 
 function renderItem(it) {
   return `
