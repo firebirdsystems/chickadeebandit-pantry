@@ -10,6 +10,7 @@
   "tags": ["food", "pantry", "inventory", "kitchen", "grocery"],
   "storage": "db",
   "db_plaintext_columns": ["expiry_date"],
+  "contexts": ["household", "shared_space"],
   "data_access": {
     "reads": ["family.members"],
     "writes": ["app.grocery.pending_items"]
