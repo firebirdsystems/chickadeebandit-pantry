@@ -24,3 +24,12 @@ export function visibleItems(items, view) {
   if (view === "all") return items;
   return items.filter(i => i.category === view);
 }
+
+/**
+ * Fields the in-app search matches against (see hub-sdk `searchMatch`).
+ * The note and the owner's name count as well as the item name — a
+ * pantry is searched for "Sam's oat milk" as often as for "milk".
+ */
+export function searchableFields(item) {
+  return [item.name, item.category, item.note, item.owner_name, item.unit];
+}

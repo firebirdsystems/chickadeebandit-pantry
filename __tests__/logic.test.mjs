@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CATEGORIES, CAT_LABEL, statusFor, daysUntil, visibleItems } from "../src/logic.js";
+import { CATEGORIES, CAT_LABEL, statusFor, daysUntil, visibleItems, searchableFields } from "../src/logic.js";
 
 describe("statusFor", () => {
   it("out when quantity is zero or less", () => {
@@ -45,5 +45,16 @@ describe("visibleItems", () => {
 describe("constants", () => {
   it("label every category", () => {
     for (const c of CATEGORIES) expect(CAT_LABEL[c]).toBeTruthy();
+  });
+});
+
+describe("searchableFields", () => {
+  it("matches on the note and the owner, not just the item name", () => {
+    const fields = searchableFields({
+      name: "Oat milk", category: "fridge", note: "barista, do not use for cereal",
+      owner_name: "Sam", unit: "carton",
+    });
+    expect(fields).toContain("Sam");
+    expect(fields).toContain("barista, do not use for cereal");
   });
 });
