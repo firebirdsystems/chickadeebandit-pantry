@@ -9,7 +9,7 @@
   "category": "food",
   "tags": ["food", "pantry", "inventory", "kitchen", "grocery"],
   "storage": "db",
-  "db_plaintext_columns": ["expiry_date"],
+  "db_plaintext_columns": ["expiry_date", "name"],
   "contexts": ["household", "shared_space"],
   "data_access": {
     "reads": ["family.members"],
@@ -18,6 +18,12 @@
   "permissions": {
     "default_audience": "everyone",
     "requires_approval": false
+  },
+  "member_references": {
+    "items": {
+      "column": "created_by_id",
+      "on_removed": "keep"
+    }
   },
   "nav": { "label": "Pantry" },
   "glance": {
