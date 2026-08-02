@@ -96,6 +96,22 @@ const CONTEXT = window.__CONTEXT_URL ?? "";
 const DB = window.__DB_URL ?? "";
 const HUB_MEMBER = window.__CURRENT_MEMBER ?? null;
 
+const EVENTS = window.__EVENTS_URL ?? "";
+
+async function publishEvent(type, subjectId, payload = {}) {
+  if (!EVENTS) return;
+  try {
+    await fetch(EVENTS, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, subject_id: subjectId, payload }),
+    });
+  } catch {
+    // Best-effort: the row is already written, so a failed publish is not fatal.
+  }
+}
+
+
 let members = [];
 let currentMember = null;
 let items = [];
@@ -201,6 +217,11 @@ async function saveItem(fields, existingId) {
         [row.id, row.name, row.category, row.quantity, row.unit, row.low_threshold, row.status, row.expiry_date, row.owner_name, row.note, row.created_by_id, row.created_by_name, row.created_at, row.updated_at]
       );
     }
+    await publishEvent("pantry.item_added", row.id, {
+      name: row.name,
+      category: row.category,
+      expiry_date: row.expiry_date,
+    });
     items = [...items, row].sort((a, b) => a.name.localeCompare(b.name));
     closeModal();
     showNotice(`Added ${row.name}.`);
@@ -219,6 +240,16 @@ async function adjustQty(id, delta) {
   render();
   try {
     if (DB) await dbq(`UPDATE app_pantry__items SET quantity=?, status=?, updated_at=? WHERE id=?`, [quantity, status, now, id]);
+    // Only on the crossing into low/out, not on every decrement — otherwise a
+    // rule that adds the item to the grocery list would re-add it each tap.
+    if (it.status === "ok" && status !== "ok") {
+      await publishEvent("pantry.item_low", id, {
+        name: it.name,
+        category: it.category,
+        quantity,
+        status,
+      });
+    }
   } catch (e) { showError(e.message); await loadData().catch(() => {}); render(); }
 }
 

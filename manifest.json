@@ -9,6 +9,57 @@
   "category": "food",
   "tags": ["food", "pantry", "inventory", "kitchen", "grocery"],
   "storage": "db",
+  "automation_actions": {
+    "add_item": {
+      "title": "Stock a pantry item",
+      "description": "Add something to the kitchen inventory when another app's event fires - groceries bought, a delivery received, a staple restocked.",
+      "params": {
+        "created_by_id": {
+          "type": "member",
+          "label": "Stocked by",
+          "required": true
+        },
+        "name": {
+          "type": "text",
+          "label": "Item",
+          "required": true
+        },
+        "category": {
+          "type": "text",
+          "label": "Where it lives",
+          "default": "pantry",
+          "options": ["fridge", "freezer", "pantry", "other"]
+        },
+        "quantity": {
+          "type": "integer",
+          "label": "How many",
+          "default": 1,
+          "min": 0
+        }
+      },
+      "dedupe": {
+        "table": "items",
+        "column": "source_event_id"
+      },
+      "steps": [
+        {
+          "op": "insert",
+          "table": "items",
+          "values": {
+            "id": "$uuid",
+            "name": ":name",
+            "category": ":category",
+            "quantity": ":quantity",
+            "created_by_id": ":created_by_id",
+            "created_by_name": "Automation",
+            "created_at": "$now",
+            "updated_at": "$now",
+            "source_event_id": "$event_id"
+          }
+        }
+      ]
+    }
+  },
   "db_plaintext_columns": ["expiry_date", "name"],
   "contexts": ["household", "shared_space"],
   "data_access": {
@@ -25,6 +76,9 @@
       "on_removed": "keep"
     }
   },
+  "publishes": ["pantry.item_added", "pantry.item_low"],
+  "publish_acls": {"pantry.item_added": {"require_role": "member"}, "pantry.item_low": {"require_role": "member"}},
+  "agenda": {"kind": "reminder", "label": "Expiring", "source": {"kind": "sql", "query": "SELECT id AS id, name AS title, category AS subtitle, expiry_date AS when_at FROM app_pantry__items WHERE expiry_date = :today LIMIT 20"}},
   "nav": { "label": "Pantry" },
   "glance": {
     "source": {
