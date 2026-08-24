@@ -1,7 +1,7 @@
 {
   "id": "pantry",
   "name": "Pantry Inventory",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Track what's in the fridge, freezer, and pantry — quantities, expiration dates, and what's running low. One tap pushes a depleted item to the Grocery List. Works for a single household or a shared communal kitchen with per-item owners and restock requests.",
   "entrypoint": "index.html",
   "runtime": "static",

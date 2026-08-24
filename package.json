@@ -1,6 +1,6 @@
 {
   "name": "chickadeebandit-pantry",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Pantry Inventory app for Chickadee Bandit",
   "type": "module",
   "scripts": {

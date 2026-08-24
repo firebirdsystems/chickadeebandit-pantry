@@ -245,6 +245,7 @@ async function adjustQty(id, delta) {
     if (it.status === "ok" && status !== "ok") {
       await publishEvent("pantry.item_low", id, {
         name: it.name,
+        member_id: currentMember?.id,
         category: it.category,
         quantity,
         status,
