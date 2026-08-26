@@ -9,6 +9,9 @@
   "category": "food",
   "tags": ["food", "pantry", "inventory", "kitchen", "grocery"],
   "storage": "db",
+  "preload": {
+    "items": {"sql": "SELECT * FROM app_pantry__items ORDER BY name ASC"}
+  },
   "automation_actions": {
     "add_item": {
       "title": "Stock a pantry item",
