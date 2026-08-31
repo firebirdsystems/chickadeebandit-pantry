@@ -89,7 +89,7 @@
 </div>
 
 <script type="module">
-import { esc, hubConfirm, hubAlert, crossWrite, searchMatch } from "/hub-sdk.js";
+import { esc, hubConfirm, hubAlert, crossWrite, searchMatch, hubToday as today } from "/hub-sdk.js";
 import { CATEGORIES, CAT_LABEL, statusFor, daysUntil as daysUntilOf, visibleItems as visibleItemsOf, searchableFields } from "./logic.js";
 
 const CONTEXT = window.__CONTEXT_URL ?? "";
@@ -122,7 +122,6 @@ let notice = "";
 let modalEl = null;
 
 function nowIso() { return new Date().toISOString(); }
-function today() { return new Date().toISOString().slice(0, 10); }
 function uid() { return crypto.randomUUID(); }
 
 async function dbq(sql, params = []) {
