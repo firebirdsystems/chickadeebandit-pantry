@@ -1,5 +1,7 @@
 # Pantry Inventory
 
+A [Chickadee Bandit](https://chickadeebandit.com/app-library/pantry) app.
+
 Track what's in the fridge, freezer, and pantry — quantities, expiration dates,
 and what's running low. One tap pushes a depleted item straight to the **Grocery
 List**. Reduces duplicate purchases and food waste.
