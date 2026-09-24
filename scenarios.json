@@ -1,0 +1,84 @@
+{
+  "scenarios": [
+    {
+      "name": "the inventory is household-shared: any member sees and restocks items another member added",
+      "members": { "cook": "adult", "roommate": "adult" },
+      "steps": [
+        {
+          "action": "db",
+          "as": "cook",
+          "sql": "INSERT INTO app_pantry__items (id, name, category, quantity, low_threshold, status, created_by_id, created_by_name, created_at, updated_at) VALUES (?, ?, 'fridge', 0, 1, 'out', ?, 'Cook', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+          "params": ["i_milk", "Milk", "{{cook}}"],
+          "expect": { "status": 200 }
+        },
+        {
+          "action": "db",
+          "as": "roommate",
+          "sql": "SELECT id, name, quantity FROM app_pantry__items",
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "i_milk", "name": "Milk", "quantity": 0 }] }
+        },
+        {
+          "action": "db",
+          "as": "roommate",
+          "sql": "UPDATE app_pantry__items SET quantity = 2, status = 'ok', updated_at = '2026-01-02T00:00:00Z' WHERE id = 'i_milk'",
+          "expect": { "status": 200 }
+        },
+        {
+          "action": "db",
+          "as": "cook",
+          "sql": "SELECT id, quantity, status FROM app_pantry__items",
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "i_milk", "quantity": 2, "status": "ok" }] }
+        }
+      ]
+    },
+    {
+      "name": "low_items lists only items that are low or out, and expiring_items only items with an expiry date",
+      "members": { "cook": "adult" },
+      "steps": [
+        {
+          "action": "db",
+          "as": "cook",
+          "sql": "INSERT INTO app_pantry__items (id, name, category, quantity, status, expiry_date, created_by_id, created_by_name, created_at, updated_at) VALUES (?, 'Rice', 'pantry', 5, 'ok', '', ?, 'Cook', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+          "params": ["i_rice", "{{cook}}"],
+          "expect": { "status": 200 }
+        },
+        {
+          "action": "db",
+          "as": "cook",
+          "sql": "INSERT INTO app_pantry__items (id, name, category, quantity, status, expiry_date, created_by_id, created_by_name, created_at, updated_at) VALUES (?, 'Yogurt', 'fridge', 1, 'low', '2026-01-10', ?, 'Cook', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+          "params": ["i_yogurt", "{{cook}}"],
+          "expect": { "status": 200 }
+        },
+        {
+          "action": "db",
+          "as": "cook",
+          "sql": "INSERT INTO app_pantry__items (id, name, category, quantity, status, expiry_date, created_by_id, created_by_name, created_at, updated_at) VALUES (?, 'Eggs', 'fridge', 0, 'out', '2026-01-05', ?, 'Cook', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+          "params": ["i_eggs", "{{cook}}"],
+          "expect": { "status": 200 }
+        },
+        {
+          "action": "named",
+          "as": "cook",
+          "kind": "query",
+          "name": "low_items",
+          "expect": {
+            "status": 200,
+            "rowCount": 2,
+            "rowsContain": [{ "id": "i_yogurt", "status": "low" }, { "id": "i_eggs", "status": "out" }]
+          }
+        },
+        {
+          "action": "named",
+          "as": "cook",
+          "kind": "query",
+          "name": "expiring_items",
+          "expect": {
+            "status": 200,
+            "rowCount": 2,
+            "rowsContain": [{ "id": "i_eggs", "expiry_date": "2026-01-05" }, { "id": "i_yogurt", "expiry_date": "2026-01-10" }]
+          }
+        }
+      ]
+    }
+  ]
+}
