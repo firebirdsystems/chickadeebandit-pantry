@@ -274,7 +274,7 @@ async function pushToGrocery(id) {
     ]);
     showNotice(`Sent “${it.name}” to the Grocery List.`);
   } catch (e) {
-    showError("Couldn't reach the Grocery List. Is it installed?");
+    showError(e?.code === "EXPORT_SCHEMA_VIOLATION" ? e.message : "Couldn't reach the Grocery List. Is it installed?");
   }
 }
 
