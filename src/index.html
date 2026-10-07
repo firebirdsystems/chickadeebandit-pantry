@@ -89,7 +89,7 @@
 </div>
 
 <script type="module">
-import { esc, hubConfirm, hubAlert, crossWrite, searchMatch, hubToday as today } from "/hub-sdk.js";
+import { esc, hubConfirm, hubAlert, crossWrite, searchMatch, hubToday as today, glyph, chickadee } from "/hub-sdk.js";
 import { CATEGORIES, CAT_LABEL, statusFor, daysUntil as daysUntilOf, visibleItems as visibleItemsOf, searchableFields } from "./logic.js";
 
 const CONTEXT = window.__CONTEXT_URL ?? "";
@@ -394,8 +394,8 @@ function renderItemList() {
   const list = visibleItems();
   const shown = searchQ ? list.filter(i => searchMatch(searchQ, searchableFields(i))) : list;
   if (shown.length) return shown.map(renderItem).join("");
-  if (searchQ) return `<div class="card empty">No items match "${esc(searchQ)}".</div>`;
-  return `<div class="card empty">Nothing here yet.</div>`;
+  if (searchQ) return `<div class="card empty">${chickadee("searching")}<p>No items match "${esc(searchQ)}".</p></div>`;
+  return `<div class="card empty">${chickadee("nest")}<p>Nothing here yet.</p></div>`;
 }
 
 function render() {
@@ -406,7 +406,7 @@ function render() {
   root.innerHTML = `
     <div class="topbar">
       <div>
-        <h1>🥫 Pantry Inventory</h1>
+        <h1>${glyph("jar")} Pantry Inventory</h1>
         <p class="muted tiny">${lowCount ? `${lowCount} item${lowCount === 1 ? "" : "s"} running low` : "Everything's stocked"}</p>
       </div>
       <button class="btn" data-add>Add item</button>
