@@ -67,6 +67,8 @@
     input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
     .empty, .loading { color: var(--muted); text-align: center; padding: 32px 16px; }
     .error { background: var(--red-soft); color: var(--red); padding: 9px 12px; border-radius: 8px; margin-bottom: 10px; font-size: .86rem; }
+    .load-error { margin: 0 0 12px; padding: 10px 14px; border-radius: 10px; background: var(--hub-tint-danger, #fee2e2); color: var(--hub-tint-danger-fg, #b91c1c); font-size: 0.9rem; display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+    .load-error-retry { background: none; border: 1px solid currentColor; border-radius: 8px; padding: 5px 10px; font: inherit; font-weight: 600; color: inherit; cursor: pointer; flex-shrink: 0; }
     .notice { background: var(--green-soft); color: var(--green); padding: 9px 12px; border-radius: 8px; margin-bottom: 10px; font-size: .86rem; }
     .modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 50; }
     .modal { background: var(--surface); border-radius: 12px; padding: 18px; width: 100%; max-width: 460px; box-shadow: 0 12px 40px rgba(0,0,0,.25); max-height: 90vh; overflow-y: auto; }
@@ -118,6 +120,7 @@ let items = [];
 let view = "all";     // 'all' | 'fridge' | 'freezer' | 'pantry' | 'other' | 'low'
 let searchQ = "";       // in-app search (see logic.js searchableFields)
 let error = "";
+let loadFailed = false; // first load failed; cleared when a load succeeds
 let notice = "";
 let modalEl = null;
 
@@ -131,8 +134,8 @@ async function dbq(sql, params = []) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ sql, params }),
   });
-  const json = await res.json();
-  if (json.error) throw new Error(json.error);
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !json || typeof json !== "object" || json.error) throw new Error(json?.error || "Couldn’t reach the hub. Try again.");
   return json;
 }
 
@@ -143,10 +146,10 @@ async function loadMembers() {
       { id: "demo-2", name: "Jordan", role: "adult" },
     ];
   } else {
-    try {
-      const res = await fetch(`${CONTEXT}?keys=family.members`);
-      members = ((await res.json())["family.members"]) ?? [];
-    } catch { members = []; }
+    const res = await fetch(`${CONTEXT}?keys=family.members`);
+    const ctx = await res.json().catch(() => null);
+    if (!res.ok || !ctx || typeof ctx !== "object" || ctx.$errors?.length) throw new Error("Couldn’t reach the hub. Try again.");
+    members = ctx["family.members"] ?? [];
   }
   currentMember = HUB_MEMBER ?? members[0] ?? { id: "guest", name: "Guest", role: "adult" };
 }
@@ -167,8 +170,8 @@ async function loadData() {
 
 async function refresh() {
   clearMessages();
-  try { await Promise.all([loadMembers(), loadData()]); render(); }
-  catch (e) { error = e.message; render(); }
+  try { await Promise.all([loadMembers(), loadData()]); loadFailed = false; render(); }
+  catch { loadFailed = true; render(); }
 }
 
 function clearMessages() { error = ""; notice = ""; }
@@ -360,7 +363,7 @@ function statusPill(it) {
 }
 
 function renderMessages() {
-  return `${error ? `<div class="error">${esc(error)}</div>` : ""}${notice ? `<div class="notice">${esc(notice)}</div>` : ""}`;
+  return `${loadFailed ? `<div class="load-error" data-testid="load-error" role="alert"><span>Couldn’t load the pantry.</span> <button type="button" class="load-error-retry" data-testid="load-retry">Try again</button></div>` : ""}${error ? `<div class="error">${esc(error)}</div>` : ""}${notice ? `<div class="notice">${esc(notice)}</div>` : ""}`;
 }
 
 function visibleItems() { return visibleItemsOf(items, view); }
@@ -395,6 +398,7 @@ function renderItemList() {
   const shown = searchQ ? list.filter(i => searchMatch(searchQ, searchableFields(i))) : list;
   if (shown.length) return shown.map(renderItem).join("");
   if (searchQ) return `<div class="card empty">${chickadee("searching")}<p>No items match "${esc(searchQ)}".</p></div>`;
+  if (loadFailed) return "";
   return `<div class="card empty">${chickadee("nest")}<p>Nothing here yet.</p></div>`;
 }
 
@@ -407,9 +411,9 @@ function render() {
     <div class="topbar">
       <div>
         <h1>${glyph("jar")} Pantry Inventory</h1>
-        <p class="muted tiny">${lowCount ? `${lowCount} item${lowCount === 1 ? "" : "s"} running low` : "Everything's stocked"}</p>
+        <p class="muted tiny">${loadFailed ? "" : lowCount ? `${lowCount} item${lowCount === 1 ? "" : "s"} running low` : "Everything's stocked"}</p>
       </div>
-      <button class="btn" data-add>Add item</button>
+      ${loadFailed ? "" : `<button class="btn" data-add>Add item</button>`}
     </div>
     ${renderMessages()}
     <div class="tabs">
@@ -437,6 +441,7 @@ document.addEventListener("click", (e) => {
   const t = e.target.closest("button");
   if (!t) return;
   if (t.hasAttribute("data-close")) { closeModal(); return; }
+  if (t.matches('[data-testid="load-retry"]')) { refresh(); return; }
   if (t.hasAttribute("data-add")) { openItemModal(null); return; }
   if (t.hasAttribute("data-edit")) { openItemModal(t.getAttribute("data-edit")); return; }
   if (t.hasAttribute("data-tab")) { view = t.getAttribute("data-tab"); render(); return; }
