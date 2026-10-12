@@ -201,7 +201,7 @@ async function saveItem(fields, existingId) {
       items[idx] = { ...items[idx], name, category: fields.category, quantity, unit: fields.unit.trim(), low_threshold: low, status, expiry_date: fields.expiry_date || "", owner_name: fields.owner_name.trim(), note: fields.note.trim(), updated_at: now };
       closeModal();
       showNotice("Item updated.");
-    } catch (e) { showError(e.message); }
+    } catch (e) { console.error(e); showError("Couldn’t save the item — try again."); }
     return;
   }
 
@@ -227,7 +227,7 @@ async function saveItem(fields, existingId) {
     items = [...items, row].sort((a, b) => a.name.localeCompare(b.name));
     closeModal();
     showNotice(`Added ${row.name}.`);
-  } catch (e) { showError(e.message); }
+  } catch (e) { console.error(e); showError("Couldn’t add the item — try again."); }
 }
 
 async function adjustQty(id, delta) {
@@ -253,7 +253,7 @@ async function adjustQty(id, delta) {
         status,
       });
     }
-  } catch (e) { showError(e.message); await loadData().catch(() => {}); render(); }
+  } catch (e) { console.error(e); showError("Couldn’t update the quantity — try again."); await loadData().catch(() => {}); render(); }
 }
 
 async function removeItem(id) {
@@ -265,7 +265,7 @@ async function removeItem(id) {
     if (DB) await dbq(`DELETE FROM app_pantry__items WHERE id=?`, [id]);
     items = items.filter(i => i.id !== id);
     showNotice("Removed.");
-  } catch (e) { showError(e.message); }
+  } catch (e) { console.error(e); showError("Couldn’t remove the item — try again."); }
 }
 
 async function pushToGrocery(id) {
@@ -277,6 +277,7 @@ async function pushToGrocery(id) {
     ]);
     showNotice(`Sent “${it.name}” to the Grocery List.`);
   } catch (e) {
+    console.error(e);
     showError(e?.code === "EXPORT_SCHEMA_VIOLATION" ? e.message : "Couldn't reach the Grocery List. Is it installed?");
   }
 }
