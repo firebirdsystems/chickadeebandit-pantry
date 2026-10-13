@@ -190,13 +190,15 @@ async function saveItem(fields, existingId) {
 
   if (existingId) {
     const idx = items.findIndex(i => i.id === existingId);
-    if (idx === -1) return;
+    if (idx === -1) { closeModal(); return showError("This item can no longer be changed."); }
     try {
       if (DB) {
-        await dbq(
+        const res = await dbq(
           `UPDATE app_pantry__items SET name=?, category=?, quantity=?, unit=?, low_threshold=?, status=?, expiry_date=?, owner_name=?, note=?, updated_at=? WHERE id=?`,
           [name, fields.category, quantity, fields.unit.trim(), low, status, fields.expiry_date || "", fields.owner_name.trim(), fields.note.trim(), now, existingId]
         );
+        // Zero rows: the item is gone. Say so and show what is stored.
+        if (res.changed === 0) { closeModal(); await loadData().catch(() => {}); return showError("This item can no longer be changed."); }
       }
       items[idx] = { ...items[idx], name, category: fields.category, quantity, unit: fields.unit.trim(), low_threshold: low, status, expiry_date: fields.expiry_date || "", owner_name: fields.owner_name.trim(), note: fields.note.trim(), updated_at: now };
       closeModal();
@@ -241,7 +243,11 @@ async function adjustQty(id, delta) {
   items[idx] = { ...it, quantity, status, updated_at: now };
   render();
   try {
-    if (DB) await dbq(`UPDATE app_pantry__items SET quantity=?, status=?, updated_at=? WHERE id=?`, [quantity, status, now, id]);
+    if (DB) {
+      const res = await dbq(`UPDATE app_pantry__items SET quantity=?, status=?, updated_at=? WHERE id=?`, [quantity, status, now, id]);
+      // Zero rows: nothing was stored, so undo the optimistic draw and publish nothing.
+      if (res.changed === 0) { await loadData().catch(() => {}); return showError("This item can no longer be changed."); }
+    }
     // Only on the crossing into low/out, not on every decrement — otherwise a
     // rule that adds the item to the grocery list would re-add it each tap.
     if (it.status === "ok" && status !== "ok") {
@@ -262,7 +268,10 @@ async function removeItem(id) {
   const ok = await hubConfirm({ message: `Remove ${it.name} from the pantry?`, confirmLabel: "Remove", destructive: true });
   if (!ok) return;
   try {
-    if (DB) await dbq(`DELETE FROM app_pantry__items WHERE id=?`, [id]);
+    if (DB) {
+      const res = await dbq(`DELETE FROM app_pantry__items WHERE id=?`, [id]);
+      if (res.changed === 0) { await loadData().catch(() => {}); return showError("This item was already removed."); }
+    }
     items = items.filter(i => i.id !== id);
     showNotice("Removed.");
   } catch (e) { console.error(e); showError("Couldn’t remove the item — try again."); }
