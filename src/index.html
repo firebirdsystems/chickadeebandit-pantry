@@ -464,7 +464,7 @@ document.addEventListener("submit", (e) => {
     name: val("f-name"), category: val("f-category"), quantity: val("f-qty"),
     unit: val("f-unit"), low_threshold: val("f-low"), expiry_date: val("f-expiry"),
     owner_name: val("f-owner"), note: val("f-note"),
-  }, existingId).catch(() => { if (btn) { btn.disabled = false; btn.textContent = existingId ? "Save" : "Add item"; } });
+  }, existingId).catch((err) => { console.error(err); }).finally(() => { if (btn) { btn.disabled = false; btn.textContent = existingId ? "Save" : "Add item"; } });
 });
 
 refresh();
