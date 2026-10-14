@@ -92,7 +92,7 @@
 
 <script type="module">
 import { esc, hubConfirm, hubAlert, crossWrite, searchMatch, hubToday as today, glyph, chickadee } from "/hub-sdk.js";
-import { CATEGORIES, CAT_LABEL, statusFor, daysUntil as daysUntilOf, visibleItems as visibleItemsOf, searchableFields, failureLine } from "./logic.js";
+import { CATEGORIES, CAT_LABEL, statusFor, daysUntil as daysUntilOf, visibleItems as visibleItemsOf, searchableFields, failureLine, outcomeUnknown, storedDiffers, SAVED_AS_FIRST } from "./logic.js";
 
 const CONTEXT = window.__CONTEXT_URL ?? "";
 const DB = window.__DB_URL ?? "";
@@ -193,13 +193,15 @@ async function staleWrite(id) {
 
 
 // ── mutations ────────────────────────────────────────────────────────────────
-async function saveItem(fields, existingId) {
+async function saveItem(fields, existingId, pinHost = null) {
   const name = fields.name.trim();
   if (!name) return showError("Item needs a name.");
   const quantity = Math.max(0, Number(fields.quantity) || 0);
   const low = Math.max(0, Number(fields.low_threshold) || 0);
   const status = statusFor(quantity, low);
   const now = nowIso();
+  // The modal holding this form: a later close must not shut a newer one.
+  const host = modalEl;
 
   if (existingId) {
     const idx = items.findIndex(i => i.id === existingId);
@@ -214,39 +216,63 @@ async function saveItem(fields, existingId) {
         // gone item closes the form; otherwise it stays open as typed.
         if (res.changed === 0) {
           const e = await staleWrite(existingId);
-          if (e.outcome === "removed") closeModal();
+          if (e.outcome === "removed" && modalEl === host) closeModal();
           return showError(failureLine(e, { action: "save the item", thing: "item" }));
         }
       }
       items[idx] = { ...items[idx], name, category: fields.category, quantity, unit: fields.unit.trim(), low_threshold: low, status, expiry_date: fields.expiry_date || "", owner_name: fields.owner_name.trim(), note: fields.note.trim(), updated_at: now };
-      closeModal();
+      if (modalEl === host) closeModal();
       showNotice("Item updated.");
     } catch (e) { console.error(e); showError(failureLine(e, { action: "save the item", thing: "item" })); }
     return;
   }
 
-  const row = {
-    id: uid(), name, category: fields.category, quantity, unit: fields.unit.trim(),
-    low_threshold: low, status, expiry_date: fields.expiry_date || "", owner_name: fields.owner_name.trim(),
-    note: fields.note.trim(), created_by_id: currentMember.id, created_by_name: currentMember.name,
+  // The id is the form's, minted on its first Add and sent on every retry: a
+  // try whose answer was lost may have stored the item, and a second press
+  // must find that row rather than add another.
+  const id = pinHost ? (pinHost.rowId ??= uid()) : uid();
+  const typed = {
+    name, category: fields.category, quantity, unit: fields.unit.trim(),
+    low_threshold: low, expiry_date: fields.expiry_date || "", owner_name: fields.owner_name.trim(),
+    note: fields.note.trim(),
+  };
+  let row = {
+    id, ...typed, status, created_by_id: currentMember.id, created_by_name: currentMember.name,
     created_at: now, updated_at: now,
   };
+  let note = "";
   try {
     if (DB) {
-      await dbq(
-        `INSERT INTO app_pantry__items (id, name, category, quantity, unit, low_threshold, status, expiry_date, owner_name, note, created_by_id, created_by_name, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [row.id, row.name, row.category, row.quantity, row.unit, row.low_threshold, row.status, row.expiry_date, row.owner_name, row.note, row.created_by_id, row.created_by_name, row.created_at, row.updated_at]
-      );
+      try {
+        await dbq(
+          `INSERT INTO app_pantry__items (id, name, category, quantity, unit, low_threshold, status, expiry_date, owner_name, note, created_by_id, created_by_name, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [row.id, row.name, row.category, row.quantity, row.unit, row.low_threshold, row.status, row.expiry_date, row.owner_name, row.note, row.created_by_id, row.created_by_name, row.created_at, row.updated_at]
+        );
+      } catch (e) {
+        // Unknown outcome: read the item back by the pinned id. Found means an
+        // earlier try landed and its success path never ran, so it runs now,
+        // once. Not found, or the read failed: the add fails, the id stays pinned.
+        if (!outcomeUnknown(e)) throw e;
+        let stored = null;
+        try { stored = (await dbq("SELECT * FROM app_pantry__items WHERE id = ?", [id])).rows?.[0] ?? null; }
+        catch (readErr) { console.error(readErr); }
+        if (!stored) throw e;
+        console.error(e);
+        // Edited since that first try: what was stored is kept, and said so.
+        if (storedDiffers(stored, typed)) note = SAVED_AS_FIRST;
+        row = stored;
+      }
     }
+    if (pinHost) delete pinHost.rowId;
     await publishEvent("pantry.item_added", row.id, {
       name: row.name,
       category: row.category,
       expiry_date: row.expiry_date,
     });
-    items = [...items, row].sort((a, b) => a.name.localeCompare(b.name));
-    closeModal();
-    showNotice(`Added ${row.name}.`);
+    items = [...items.filter(i => i.id !== row.id), row].sort((a, b) => a.name.localeCompare(b.name));
+    if (modalEl === host) closeModal();
+    if (note) showError(note); else showNotice(`Added ${row.name}.`);
   } catch (e) { console.error(e); showError(failureLine(e, { action: "add the item", thing: "item" })); }
 }
 
@@ -310,7 +336,7 @@ async function pushToGrocery(id) {
     showNotice(`Sent “${it.name}” to the Grocery List.`);
   } catch (e) {
     console.error(e);
-    showError(e?.code === "EXPORT_SCHEMA_VIOLATION" ? e.message : "Couldn't reach the Grocery List. Is it installed?");
+    showError(e?.code === "EXPORT_SCHEMA_VIOLATION" ? `Couldn’t add “${it.name}” to the grocery list — the Grocery app didn’t accept it.` : "Couldn't reach the Grocery List. Is it installed?");
   }
 }
 
@@ -498,7 +524,7 @@ document.addEventListener("submit", (e) => {
     name: val("f-name"), category: val("f-category"), quantity: val("f-qty"),
     unit: val("f-unit"), low_threshold: val("f-low"), expiry_date: val("f-expiry"),
     owner_name: val("f-owner"), note: val("f-note"),
-  }, existingId).catch((err) => { console.error(err); }).finally(() => { if (btn) { btn.disabled = false; btn.textContent = existingId ? "Save" : "Add item"; } });
+  }, existingId, f.dataset).catch((err) => { console.error(err); }).finally(() => { if (btn) { btn.disabled = false; btn.textContent = existingId ? "Save" : "Add item"; } });
 });
 
 refresh();
