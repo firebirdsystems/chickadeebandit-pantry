@@ -256,7 +256,12 @@ async function saveItem(fields, existingId, pinHost = null) {
         if (!outcomeUnknown(e)) throw e;
         let stored = null;
         try { stored = (await dbq("SELECT * FROM app_pantry__items WHERE id = ?", [id])).rows?.[0] ?? null; }
-        catch (readErr) { console.error(readErr); }
+        catch (readErr) {
+          // The id is ours: with the read-back failed, a UNIQUE answer may be this
+          // form's own first try, so nothing is known — "try again", not "already exists".
+          console.error(readErr);
+          throw new Error("create outcome unknown", { cause: e });
+        }
         if (!stored) throw e;
         console.error(e);
         // Edited since that first try: what was stored is kept, and said so.
