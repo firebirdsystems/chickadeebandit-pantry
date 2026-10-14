@@ -92,7 +92,7 @@
 
 <script type="module">
 import { esc, hubConfirm, hubAlert, crossWrite, searchMatch, hubToday as today, glyph, chickadee } from "/hub-sdk.js";
-import { CATEGORIES, CAT_LABEL, statusFor, daysUntil as daysUntilOf, visibleItems as visibleItemsOf, searchableFields } from "./logic.js";
+import { CATEGORIES, CAT_LABEL, statusFor, daysUntil as daysUntilOf, visibleItems as visibleItemsOf, searchableFields, failureLine } from "./logic.js";
 
 const CONTEXT = window.__CONTEXT_URL ?? "";
 const DB = window.__DB_URL ?? "";
@@ -135,7 +135,9 @@ async function dbq(sql, params = []) {
     body: JSON.stringify({ sql, params }),
   });
   const json = await res.json().catch(() => null);
-  if (!res.ok || !json || typeof json !== "object" || json.error) throw new Error(json?.error || "Couldn’t reach the hub. Try again.");
+  if (!res.ok || !json || typeof json !== "object" || json.error) {
+    throw Object.assign(new Error(json?.error || "Couldn’t reach the hub. Try again."), { status: res.status, code: json?.code });
+  }
   return json;
 }
 
@@ -178,6 +180,17 @@ function clearMessages() { error = ""; notice = ""; }
 function showError(m) { error = m; notice = ""; render(); }
 function showNotice(m) { notice = m; error = ""; render(); }
 
+// A write that changed nothing: re-read, then say whether the item is gone or
+// still there. Every caller's write is a plain `WHERE id = ?`, so an item still
+// there means the hub's row policy refused it. A failed re-read can say
+// neither, so it asks for a retry.
+async function staleWrite(id) {
+  let outcome;
+  try { await loadData(); outcome = items.some(i => i.id === id) ? "refused" : "removed"; }
+  catch (e) { console.error(e); }
+  return Object.assign(new Error("write changed nothing"), outcome ? { outcome } : {});
+}
+
 
 // ── mutations ────────────────────────────────────────────────────────────────
 async function saveItem(fields, existingId) {
@@ -190,20 +203,25 @@ async function saveItem(fields, existingId) {
 
   if (existingId) {
     const idx = items.findIndex(i => i.id === existingId);
-    if (idx === -1) { closeModal(); return showError("This item can no longer be changed."); }
+    if (idx === -1) { closeModal(); return showError("This item has been removed."); }
     try {
       if (DB) {
         const res = await dbq(
           `UPDATE app_pantry__items SET name=?, category=?, quantity=?, unit=?, low_threshold=?, status=?, expiry_date=?, owner_name=?, note=?, updated_at=? WHERE id=?`,
           [name, fields.category, quantity, fields.unit.trim(), low, status, fields.expiry_date || "", fields.owner_name.trim(), fields.note.trim(), now, existingId]
         );
-        // Zero rows: the item is gone. Say so and show what is stored.
-        if (res.changed === 0) { closeModal(); await loadData().catch(() => {}); return showError("This item can no longer be changed."); }
+        // Zero rows: nothing was stored. Say why and show what is stored. Only a
+        // gone item closes the form; otherwise it stays open as typed.
+        if (res.changed === 0) {
+          const e = await staleWrite(existingId);
+          if (e.outcome === "removed") closeModal();
+          return showError(failureLine(e, { action: "save the item", thing: "item" }));
+        }
       }
       items[idx] = { ...items[idx], name, category: fields.category, quantity, unit: fields.unit.trim(), low_threshold: low, status, expiry_date: fields.expiry_date || "", owner_name: fields.owner_name.trim(), note: fields.note.trim(), updated_at: now };
       closeModal();
       showNotice("Item updated.");
-    } catch (e) { console.error(e); showError("Couldn’t save the item — try again."); }
+    } catch (e) { console.error(e); showError(failureLine(e, { action: "save the item", thing: "item" })); }
     return;
   }
 
@@ -229,7 +247,7 @@ async function saveItem(fields, existingId) {
     items = [...items, row].sort((a, b) => a.name.localeCompare(b.name));
     closeModal();
     showNotice(`Added ${row.name}.`);
-  } catch (e) { console.error(e); showError("Couldn’t add the item — try again."); }
+  } catch (e) { console.error(e); showError(failureLine(e, { action: "add the item", thing: "item" })); }
 }
 
 async function adjustQty(id, delta) {
@@ -246,7 +264,12 @@ async function adjustQty(id, delta) {
     if (DB) {
       const res = await dbq(`UPDATE app_pantry__items SET quantity=?, status=?, updated_at=? WHERE id=?`, [quantity, status, now, id]);
       // Zero rows: nothing was stored, so undo the optimistic draw and publish nothing.
-      if (res.changed === 0) { await loadData().catch(() => {}); return showError("This item can no longer be changed."); }
+      // The re-read redraws stored state; when it failed, put the previous item back.
+      if (res.changed === 0) {
+        const e = await staleWrite(id);
+        if (!e.outcome) { const at = items.findIndex(i => i.id === id); if (at !== -1) items[at] = it; }
+        return showError(failureLine(e, { action: "update the quantity", thing: "item" }));
+      }
     }
     // Only on the crossing into low/out, not on every decrement — otherwise a
     // rule that adds the item to the grocery list would re-add it each tap.
@@ -259,7 +282,7 @@ async function adjustQty(id, delta) {
         status,
       });
     }
-  } catch (e) { console.error(e); showError("Couldn’t update the quantity — try again."); await loadData().catch(() => {}); render(); }
+  } catch (e) { console.error(e); showError(failureLine(e, { action: "update the quantity", thing: "item" })); await loadData().catch(() => {}); render(); }
 }
 
 async function removeItem(id) {
@@ -270,11 +293,11 @@ async function removeItem(id) {
   try {
     if (DB) {
       const res = await dbq(`DELETE FROM app_pantry__items WHERE id=?`, [id]);
-      if (res.changed === 0) { await loadData().catch(() => {}); return showError("This item was already removed."); }
+      if (res.changed === 0) return showError(failureLine(await staleWrite(id), { action: "remove the item", thing: "item" }));
     }
     items = items.filter(i => i.id !== id);
     showNotice("Removed.");
-  } catch (e) { console.error(e); showError("Couldn’t remove the item — try again."); }
+  } catch (e) { console.error(e); showError(failureLine(e, { action: "remove the item", thing: "item" })); }
 }
 
 async function pushToGrocery(id) {
@@ -307,7 +330,7 @@ function closeModal() { modalEl?.remove(); modalEl = null; }
 function openItemModal(existingId) {
   const it = existingId ? items.find(i => i.id === existingId) : null;
   // Asked to edit an item the list no longer holds: say so, not an empty Add form.
-  if (existingId && !it) return showError("This item can no longer be changed.");
+  if (existingId && !it) return showError("This item has been removed.");
   openModal(`
     <h2>${it ? "Edit item" : "Add item"}</h2>
     <form class="form" id="item-form" data-id="${it ? esc(it.id) : ""}">
