@@ -306,6 +306,8 @@ function closeModal() { modalEl?.remove(); modalEl = null; }
 
 function openItemModal(existingId) {
   const it = existingId ? items.find(i => i.id === existingId) : null;
+  // Asked to edit an item the list no longer holds: say so, not an empty Add form.
+  if (existingId && !it) return showError("This item can no longer be changed.");
   openModal(`
     <h2>${it ? "Edit item" : "Add item"}</h2>
     <form class="form" id="item-form" data-id="${it ? esc(it.id) : ""}">
