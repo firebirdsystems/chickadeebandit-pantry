@@ -8,7 +8,7 @@
 -- skip-list already; `expiry_date` is declared plaintext in the manifest so it
 -- can be sorted / compared for "expiring soon".
 CREATE TABLE IF NOT EXISTS app_pantry__items (
-  id             TEXT PRIMARY KEY,
+  id             TEXT NOT NULL PRIMARY KEY,
   name           TEXT NOT NULL,
   category       TEXT NOT NULL DEFAULT 'pantry',   -- 'fridge' | 'freezer' | 'pantry' | 'other'
   quantity       INTEGER NOT NULL DEFAULT 1,
